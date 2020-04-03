@@ -49,6 +49,8 @@ using Comsol2FinEtoolsModel: solve_ep
 # The name of the parameter file is up to you
 parameterfile = "twoblocks.json"
 solve_ep(parameterfile)
+
+exit()
 ```
 Note that the name of the parameter JSON file is the one created in the previous section.
 
