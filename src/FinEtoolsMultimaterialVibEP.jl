@@ -1,4 +1,4 @@
-module Comsol2FinEtoolsModel
+module FinEtoolsMultimaterialVibEP
 
 using JSON
 using Printf
@@ -116,21 +116,4 @@ function solve_ep(parameterfile)
 
 end # solve_ep
 
-end # module Comsol2FinEtoolsModel
-
-
-
-# materials = Dict(
-#     1=>(name = "steel", E = 205000*phun("MPa"), nu = 0.3, rho = 7850*phun("KG*M^-3")), 
-#     2=>(name = "aluminum", E = 70000*phun("MPa"), nu = 0.34, rho = 2700*phun("KG*M^-3"))
-#     )
-
-# neigvs = 20
-# frequencyshift = 10.0
-
-# parameters = Dict("materials"=>materials, "meshfile"=>meshfile, "neigvs"=>neigvs, "frequencyshift"=>frequencyshift)
-# jsn = "test.json"
-# open(jsn, "w") do file
-#     JSON.print(file, parameters, 4)
-# end
-
+end # module FinEtoolsMultimaterialVibEP
