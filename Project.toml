@@ -1,3 +1,8 @@
+name = "Comsol2FinEtoolsModel"                                                                                                                                                       
+uuid = "451988e8-012b-46e1-be86-978aafd728ee"                                                                                                                                        
+authors = ["Petr Krysl <pkrysl@ucsd.edu>"]                                                                                                                                           
+version = "0.1.0"    
+
 [deps]
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
