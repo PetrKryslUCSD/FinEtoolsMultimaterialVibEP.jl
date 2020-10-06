@@ -34,6 +34,13 @@ function solve_ep(parameterfile)
     output = import_NASTRAN(meshfile)
     fens, fesets, pids = output["fens"], output["fesets"], output["property_ids"] 
 
+    # Check that all property IDs are defined in the input file
+    for p in pids
+        if !(string(p) in keys(materials))
+            @error "Material $(string(p)) was not defined in $(parameterfile)"
+        end
+    end
+
     geom = NodalField(fens.xyz)
     u = NodalField(zeros(size(fens.xyz,1),3)) # displacement field
 
