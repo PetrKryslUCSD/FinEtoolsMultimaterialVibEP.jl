@@ -13,12 +13,14 @@ using LinearAlgebra
 using SparseArrays
 using Arpack
 using MAT
+using Infiltrator
 
 function solve_ep(parameterfile)
 
     parameters = open(parameterfile, "r") do file
         JSON.parse(file)
     end
+    @info "Loaded $parameterfile"
 
     materials = parameters["materials"]
     meshfile = parameters["meshfile"]
@@ -68,11 +70,35 @@ function solve_ep(parameterfile)
     # v (only if ritzvec=true), the number of converged eigenvalues nconv, the number
     # of iterations niter and the number of matrix vector multiplications nmult, as
     # well as the final residual vector resid.
-
-    d,v,nev,nconv = eigs(K+OmegaShift*M, M; nev=neigvs, which=:SM, explicittransform=:none)
+    @info "Solving eigenvalue problem for $neigvs frequencies"
+    d, v, conv = eigs(K+OmegaShift*M, M; nev=neigvs, which=:SM, explicittransform=:none)
+    @assert  conv == length(d)
     d = d .- OmegaShift;
     fs = real(sqrt.(complex(d)))/(2*pi)
-    # println("Eigenvalues: $fs [Hz]")
+
+    # @show size(d), size(v), size(M)
+    # @show d
+    # @info "Checking orthogonality"
+    # tol = 1.0e-6
+    # for i in 1:length(d), j in 1:length(d)
+    #     p = v[:, i]' * M * v[:, j]
+    #     if i == j && abs(p - 1) > tol
+    #         @show i, p
+    #     end
+    #     if i != j && abs(p) > tol
+    #         @show i, j, p
+    #     end
+    # end
+    # for i in 1:length(d), j in 1:length(d)
+    #     p = v[:, i]' * K * v[:, j]
+    #     if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
+    #         @show i, p
+    #     end
+    #     if i != j && abs(p) > max(tol, tol*abs(d[i]))
+    #         @show i, j, p, d[i]
+    #     end
+    # end
+    println("Eigenvalues: $fs [Hz]")
     # open(meshfilebase * "-eval" * ".mat", "w") do file
     #     writedlm(file, d)
     #     # write(file, matrix[:])
@@ -93,43 +119,60 @@ function solve_ep(parameterfile)
     bfes = meshboundary(allfes)
     bconn = connasarray(bfes)
 
-    # MESH.write_MESH("$(meshfilebase)-surface.mesh", fens, bfes) 
+    # Define an auxiliary field: it has 1 degree of freedom at all the nodes of the mesh
+    P = NodalField(collect(1:count(fens)));
+    numberdofs!(P);
 
-    # Create a machine for the surface integrals, and calculate the coupling structural-acoustic matrix. Note that the acoustic fluid properties are not used in this method and they are supplied as dummy values.
+    # Find the nodes on the surface
+    sn = connectednodes(bfes);
+    on = setdiff(1:count(fens), sn);
+    # Put a constraint "is on surface" == 0 (false) at the interior nodes
+    setebc!(P, on, true, 1, 0);
+    applyebc!(P);
+    # Only the surface nodes will carry a nonzero equation number
+    permutation = zeros(Int, count(fens));
+    permutation[sn] = 1:length(sn);
+    permutation[on] = length(sn)+1:length(permutation);
+    numberdofs!(P, permutation);
+
+    mX = fill(Inf, P.nfreedofs, 3);
+    for j in 1:count(fens)
+        if P.dofnums[j] > 0
+            mX[P.dofnums[j], :] = fens.xyz[j, :]
+        end
+    end
+    # Create a machine for the surface integrals, and calculate the coupling
+    # structural-acoustic matrix. Note that the acoustic fluid properties are
+    # not used in this method and they are supplied as dummy values.
     bfemm = FEMMAcoustSurf(IntegDomain(bfes, SimplexRule(2, 1)), MatAcoustFluid(1.0, 1.0))
     G = acousticcouplingpanels(bfemm, geom, u);
 
-    # Compute the areas of all the boundary triangles. 
-    areas = fill(0.0, count(bfes))
-    for panel = 1:count(bfes)
-        femm1  =  FEMMBase(IntegDomain(subset(bfes, [panel]), SimplexRule(2, 1)))
-        areas[panel] = integratefunction(femm1, geom, (x) ->  1.0)
+    # Construct the matrix of the connectivities of all the surface finite elements (panels)
+    mConn = zeros(Int, count(bfes), nodesperelem(bfes))
+    for j in 1:size(mConn, 1)
+        mConn[j,:] .= P.dofnums[bconn[j, :]]; # need to renumber to match mX
     end
 
-    # open(meshfilebase * "-areas" * ".mat", "w") do file
-    #     writedlm(file, areas)
-    #     # write(file, matrix[:])
-    # end
+    # @infiltrate
 
-    I, J, V =  SparseArrays.findnz(G)
-    # open(meshfilebase * "-G" * ".mat", "w") do file
-    #     for i in 1:length(I)
-    #         @printf(file, "%d, %d, %g\n", I[i], J[i], V[i])
-    #     end
-    #     # writedlm(file, hcat(I, J, V))
-    #     # write(file, matrix[:])
-    # end
+    # MESH.write_MESH("$(meshfilebase)-surface.mesh", fens, bfes) 
 
-    Omega = d
-    E = v
-    X = fens.xyz
-    conn = bconn
+    sgeom = NodalField(mX)
+    sfes = fromarray!(bfes, mConn)
+    # Compute the areas of all the boundary triangles. 
+    areas = fill(0.0, count(sfes))
+    for panel = 1:count(sfes)
+        femm1  =  FEMMBase(IntegDomain(subset(sfes, [panel]), SimplexRule(2, 1)))
+        areas[panel] = integratefunction(femm1, sgeom, (x) ->  1.0)
+    end
+
     file = matopen(meshfilebase * ".mat", "w")
     write(file, "Omega", d)
     write(file, "E", v)
-    write(file, "X", fens.xyz)
-    write(file, "conn", bconn)
+    write(file, "X", mX)
+    write(file, "conn", mConn)
     write(file, "G", G)
+    write(file, "areas", areas)
     close(file)
 
     true
