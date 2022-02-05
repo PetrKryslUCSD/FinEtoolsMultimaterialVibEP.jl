@@ -13,7 +13,6 @@ using LinearAlgebra
 using SparseArrays
 using Arpack
 using MAT
-using Infiltrator
 
 function solve_ep(parameterfile)
 
