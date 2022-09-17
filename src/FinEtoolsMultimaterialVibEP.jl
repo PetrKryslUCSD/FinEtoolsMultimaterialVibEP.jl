@@ -11,6 +11,8 @@ using FinEtoolsAcoustics
 using FinEtools.MeshExportModule
 using LinearAlgebra
 using SparseArrays
+using Random
+using Statistics
 using Arpack
 using MAT
 
@@ -25,6 +27,7 @@ function solve_ep(parameterfile)
     meshfile = parameters["meshfile"]
     neigvs = parameters["neigvs"]
     frequencyshift = parameters["frequencyshift"]
+
 
     meshfilebase, ext = splitext(meshfile)
 
@@ -52,6 +55,7 @@ function solve_ep(parameterfile)
     allfes = nothing
     for i in 1:length(fesets)
         pid = string(pids[i])
+        setlabel!(fesets[i], pids[i])
         E, nu, rho = materials[pid]["E"], materials[pid]["nu"], materials[pid]["rho"]
         material = MatDeforElastIso(MR, rho, E, nu, 0.0)
         femm = FEMMDeforLinearESNICET4(MR, IntegDomain(fesets[i], NodalSimplexRule(3)), material)
@@ -59,9 +63,9 @@ function solve_ep(parameterfile)
         K += stiffness(femm, geom, u)
         M += mass(femm, geom, u)
         if allfes == nothing
-            allfes = fesets[i]
+            allfes = deepcopy(fesets[i])
         else
-            allfes = cat(allfes, fesets[i])
+            allfes = cat(allfes, deepcopy(fesets[i]))
         end
     end
     
@@ -75,7 +79,7 @@ function solve_ep(parameterfile)
     d = d .- OmegaShift;
     fs = real(sqrt.(complex(d)))/(2*pi)
 
-    # @show size(d), size(v), size(M)
+    # size(d), size(v), size(M)
     # @show d
     # @info "Checking orthogonality"
     # tol = 1.0e-6
@@ -158,12 +162,20 @@ function solve_ep(parameterfile)
 
     sgeom = NodalField(mX)
     sfes = fromarray!(bfes, mConn)
+    npanels = count(sfes)
     # Compute the areas of all the boundary triangles. 
-    areas = fill(0.0, count(sfes))
-    for panel = 1:count(sfes)
+    areas = fill(0.0, npanels)
+    for panel = 1:npanels
         femm1  =  FEMMBase(IntegDomain(subset(sfes, [panel]), SimplexRule(2, 1)))
         areas[panel] = integratefunction(femm1, sgeom, (x) ->  1.0)
     end
+
+    numinteriorpoints_fraction = 0.05
+    if "numinteriorpoints_fraction" in keys(parameters)
+        numinteriorpoints_fraction = parameters["numinteriorpoints_fraction"]
+    end
+    numinteriorpoints = Int(round(numinteriorpoints_fraction * npanels))
+    interiorxyz = interiorpoints(fens, allfes, numinteriorpoints; use_labels = true)
 
     file = matopen(meshfilebase * ".mat", "w")
     write(file, "Omega", d)
@@ -172,10 +184,58 @@ function solve_ep(parameterfile)
     write(file, "conn", mConn)
     write(file, "G", G)
     write(file, "areas", areas)
+    write(file, "interiorxyz", interiorxyz)
     close(file)
 
     true
 
 end # solve_ep
+
+
+# The interior points are added as randomly selected centroids of (a fraction
+# of) the elements
+function interiorpoints(fens, fes, numpoints; use_labels = false)::Matrix{Float64}
+    xyz = fens.xyz
+    # Fraction of finite elements that should have an interior point
+    r = Float64(numpoints) / count(fes)
+    if use_labels
+        ulab  = unique(fes.label)
+        # First count how many interior points we will generate
+        numpoints = 0
+        for l in ulab
+            lst = selectelem(fens, fes, label = l)
+            numpoints += max(1, Int(round(r * length(lst))))
+        end
+        numpoints = max(1, min(numpoints, count(fes)))
+        interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
+        p = 1
+        for l in ulab
+            lst = selectelem(fens, fes, label = l)
+            sfes = subset(fes, lst)
+            rix = randperm(count(sfes));
+            conn = connasarray(sfes)
+            np = max(1, Int(round(r * count(sfes))))
+            for i in 1:np
+                k = rix[i]
+                interiorxyz[p, :] = mean(xyz[view(conn, k, :), :], dims=1)
+                p += 1
+            end
+        end
+        @assert p == numpoints + 1
+    else
+        conn = connasarray(fes)
+        rix = randperm(count(fes));
+        numpoints = min(numpoints, count(fes))
+        interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
+        for i in 1:numpoints
+            k = rix[i]
+            interiorxyz[i, :] = mean(xyz[view(conn, k, :), :], dims=1)
+        end
+    end
+    
+    return interiorxyz
+end # function 
+
+
 
 end # module FinEtoolsMultimaterialVibEP

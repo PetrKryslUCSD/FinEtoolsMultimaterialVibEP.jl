@@ -15,5 +15,6 @@
             "nu": 0.3,
             "rho": 7850.0
         }
-    }
+    },
+    "numinteriorpoints_fraction": 0.07
 }
