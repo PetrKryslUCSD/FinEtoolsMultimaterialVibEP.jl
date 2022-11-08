@@ -120,6 +120,7 @@ function solve_ep(parameterfile)
 
     # Extract the boundary
     bfes = meshboundary(allfes)
+    bfes = outer_surface_of_solid(fens, bfes)
     bconn = connasarray(bfes)
 
     # Define an auxiliary field: it has 1 degree of freedom at all the nodes of the mesh
