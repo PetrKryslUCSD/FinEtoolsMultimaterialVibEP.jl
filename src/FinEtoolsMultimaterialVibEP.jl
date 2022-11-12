@@ -29,7 +29,7 @@ function solve_ep(parameterfile)
     frequencyshift = parameters["frequencyshift"]
     maxiter = haskey(parameters, "maxiter") ? parameters["maxiter"] : 300
     method = haskey(parameters, "method") ? parameters["method"] : "eigs"
-    withrr = haskey(parameters, "withrr") ? parameters["withrr"] : false
+    verbose = haskey(parameters, "verbose") ? parameters["verbose"] : false
     tol = haskey(parameters, "tol") ? parameters["tol"] : 1.0e-3
 
     meshfilebase, ext = splitext(meshfile)
@@ -82,7 +82,7 @@ function solve_ep(parameterfile)
         # @show "eigs", d
         d = d .- OmegaShift;
     else
-        lamb, v, nconv, niter, lamberr = AlgoDeforLinearModule.ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=false)
+        lamb, v, nconv, niter, lamberr = AlgoDeforLinearModule.ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
         d = lamb
          # @show "ssit", d
         d = d .- OmegaShift;
