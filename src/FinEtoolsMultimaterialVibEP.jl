@@ -27,7 +27,7 @@ function solve_ep(parameterfile)
     meshfile = parameters["meshfile"]
     neigvs = parameters["neigvs"]
     frequencyshift = parameters["frequencyshift"]
-
+    maxiter = haskey(parameters, "maxiter") ? parameters["maxiter"] : 300
 
     meshfilebase, ext = splitext(meshfile)
 
@@ -74,7 +74,7 @@ function solve_ep(parameterfile)
     # of iterations niter and the number of matrix vector multiplications nmult, as
     # well as the final residual vector resid.
     @info "Solving eigenvalue problem for $neigvs frequencies"
-    d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, explicittransform=:none)
+    d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none)
     @assert  conv == length(d)
     d = d .- OmegaShift;
     fs = real(sqrt.(complex(d)))/(2*pi)
