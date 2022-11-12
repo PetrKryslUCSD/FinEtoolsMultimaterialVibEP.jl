@@ -27,17 +27,13 @@ let
         GRID(e, i, fens.xyz[i,:])
     end
     j = 1
-    sfes = subset(fes, output["elsets"]["SET-1"])
-    conn = connasarray(sfes)
-    for i in 1:count(sfes)
-        CTETRA(e, j, 1, conn[i, :])
-        j = j + 1
-    end
-    sfes = subset(fes, output["elsets"]["SET-2"])
-    conn = connasarray(sfes)
-    for i in 1:count(sfes)
-        CTETRA(e, j, 2, conn[i, :])
-        j = j + 1
+    for k in [1, 2]
+        sfes = subset(fes, output["elsets"]["SET-$k"])
+        conn = connasarray(sfes)
+        for i in 1:count(sfes)
+            CTETRA(e, j, k, conn[i, :])
+            j = j + 1
+        end
     end
     PSOLID(e, 1, 1)
     PSOLID(e, 2, 2)
