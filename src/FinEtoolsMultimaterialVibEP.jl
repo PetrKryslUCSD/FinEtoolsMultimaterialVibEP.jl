@@ -28,10 +28,13 @@ function solve_ep(parameterfile)
     neigvs = parameters["neigvs"]
     frequencyshift = parameters["frequencyshift"]
     maxiter = haskey(parameters, "maxiter") ? parameters["maxiter"] : 300
+    method = haskey(parameters, "method") ? parameters["method"] : "eigs"
+    withrr = haskey(parameters, "withrr") ? parameters["withrr"] : false
+    tol = haskey(parameters, "tol") ? parameters["tol"] : 1.0e-3
 
     meshfilebase, ext = splitext(meshfile)
 
-    OmegaShift = (2*pi*frequencyshift) ^ 2; # to resolve rigid body modes
+    @show OmegaShift = (2*pi*frequencyshift) ^ 2; # to resolve rigid body modes
     
     # No need to change anything below this line ##########
     MR = DeforModelRed3D
@@ -74,8 +77,18 @@ function solve_ep(parameterfile)
     # of iterations niter and the number of matrix vector multiplications nmult, as
     # well as the final residual vector resid.
     @info "Solving eigenvalue problem for $neigvs frequencies"
-    d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none)
-    @assert  conv == length(d)
+    if method == "eigs"
+        d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, tol = tol, maxiter = maxiter, explicittransform=:none, check = 1)
+    else
+        @show OmegaShift
+        p = neigvs * 2
+        lamb, v, nconv, niter, nmult, lamberr = AlgoDeforLinearModule.ssit(K, M; nev=neigvs, evshift = OmegaShift,
+            v0 = rand(size(K, 1), p), tol = tol, maxiter = maxiter, withrr=false,
+            verbose=true)
+        d = lamb
+        conv = nconv
+    end
+    @info "$conv eigenvalues converged"
     d = d .- OmegaShift;
     fs = real(sqrt.(complex(d)))/(2*pi)
 
