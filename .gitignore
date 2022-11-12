@@ -32,3 +32,4 @@ Manifest.toml
 *.mat
 *.dat
 *.mesh
+*.h5
