@@ -15,6 +15,7 @@ using Random
 using Statistics
 using Arpack
 using MAT
+using DataDrop
 
 function solve_ep(parameterfile)
 
@@ -31,6 +32,7 @@ function solve_ep(parameterfile)
     method = haskey(parameters, "method") ? parameters["method"] : "eigs"
     verbose = haskey(parameters, "verbose") ? parameters["verbose"] : false
     tol = haskey(parameters, "tol") ? parameters["tol"] : 1.0e-3
+    check_orthogonality = haskey(parameters, "check_orthogonality") ? parameters["check_orthogonality"] : false
 
     meshfilebase, ext = splitext(meshfile)
 
@@ -52,6 +54,7 @@ function solve_ep(parameterfile)
     u = NodalField(zeros(size(fens.xyz,1),3)) # displacement field
 
     numberdofs!(u)
+    @info "$(count(fens)) nodes"
 
     K = spzeros(u.nfreedofs, u.nfreedofs)
     M = spzeros(u.nfreedofs, u.nfreedofs)
@@ -95,32 +98,35 @@ function solve_ep(parameterfile)
 
     # size(d), size(v), size(M)
     # @show d
-    @info "Checking orthogonality"
-    tol = 1.0e-6
-    max_vMv_diag_error = 0.0
-    max_vMv_offdiag_error = 0.0
-    for i in 1:length(d), j in 1:length(d)
-        p = v[:, i]' * M * v[:, j]
-        if i == j && abs(p - 1) > tol
-            max_vMv_diag_error = max(max_vMv_diag_error, abs(p - 1))
+    if check_orthogonality
+        @info "Checking orthogonality"
+        tol = 1.0e-6
+        max_vMv_diag_error = 0.0
+        max_vMv_offdiag_error = 0.0
+        for i in 1:length(d), j in 1:length(d)
+            p = v[:, i]' * M * v[:, j]
+            if i == j && abs(p - 1) > tol
+                max_vMv_diag_error = max(max_vMv_diag_error, abs(p - 1))
+            end
+            if i != j && abs(p) > tol
+                max_vMv_offdiag_error = max(max_vMv_offdiag_error, abs(p))
+            end
         end
-        if i != j && abs(p) > tol
-            max_vMv_offdiag_error = max(max_vMv_offdiag_error, abs(p))
+        max_vKv_diag_error = 0.0
+        max_vKv_offdiag_error = 0.0
+        for i in 1:length(d), j in 1:length(d)
+            p = v[:, i]' * K * v[:, j]
+            if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
+                max_vKv_diag_error = max(max_vKv_diag_error, abs(p - d[i]))
+            end
+            if i != j && abs(p) > max(tol, tol*abs(d[i]))
+                max_vKv_offdiag_error = max(max_vKv_offdiag_error, abs(p))
+            end
         end
+        @info "Mass: diagonal error = $(max_vMv_diag_error), off-diagonal error = $(max_vMv_offdiag_error) "
+        @info "Stiffness: diagonal error = $(max_vKv_diag_error), off-diagonal error = $(max_vKv_offdiag_error) "
     end
-    max_vKv_diag_error = 0.0
-    max_vKv_offdiag_error = 0.0
-    for i in 1:length(d), j in 1:length(d)
-        p = v[:, i]' * K * v[:, j]
-        if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
-            max_vKv_diag_error = max(max_vKv_diag_error, abs(p - d[i]))
-        end
-        if i != j && abs(p) > max(tol, tol*abs(d[i]))
-            max_vKv_offdiag_error = max(max_vKv_offdiag_error, abs(p))
-        end
-    end
-    @info "Mass: diagonal error = $(max_vMv_diag_error), off-diagonal error = $(max_vMv_offdiag_error) "
-    @info "Stiffness: diagonal error = $(max_vKv_diag_error), off-diagonal error = $(max_vKv_offdiag_error) "
+
     println("Eigenvalues: $fs [Hz]")
     # open(meshfilebase * "-eval" * ".mat", "w") do file
     #     writedlm(file, d)
@@ -207,6 +213,12 @@ function solve_ep(parameterfile)
     write(file, "areas", areas)
     write(file, "interiorxyz", interiorxyz)
     close(file)
+
+    f = DataDrop.with_extension(DataDrop.clean_file_name(meshfilebase * "-model"), ".h5")
+    DataDrop.empty_hdf5_file(f)
+    DataDrop.store_matrix(f, "/xyz", fens.xyz)
+    DataDrop.store_matrix(f, "/dofnums", u.dofnums)
+    DataDrop.store_matrix(f, "/conn", connasarray(allfes))
 
     true
 
