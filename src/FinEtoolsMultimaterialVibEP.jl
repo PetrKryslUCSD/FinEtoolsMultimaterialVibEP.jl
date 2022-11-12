@@ -34,7 +34,7 @@ function solve_ep(parameterfile)
 
     meshfilebase, ext = splitext(meshfile)
 
-    @show OmegaShift = (2*pi*frequencyshift) ^ 2; # to resolve rigid body modes
+    OmegaShift = (2*pi*frequencyshift) ^ 2; # to resolve rigid body modes
     
     # No need to change anything below this line ##########
     MR = DeforModelRed3D
@@ -78,42 +78,49 @@ function solve_ep(parameterfile)
     # well as the final residual vector resid.
     @info "Solving eigenvalue problem for $neigvs frequencies"
     if method == "eigs"
-        d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, tol = tol, maxiter = maxiter, explicittransform=:none, check = 1)
+        d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
+        # @show "eigs", d
+        d = d .- OmegaShift;
     else
-        @show OmegaShift
-        p = neigvs * 2
-        lamb, v, nconv, niter, nmult, lamberr = AlgoDeforLinearModule.ssit(K, M; nev=neigvs, evshift = OmegaShift,
-            v0 = rand(size(K, 1), p), tol = tol, maxiter = maxiter, withrr=false,
-            verbose=true)
+        lamb, v, nconv, niter, lamberr = AlgoDeforLinearModule.ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=false)
         d = lamb
+         # @show "ssit", d
+        d = d .- OmegaShift;
         conv = nconv
     end
     @info "$conv eigenvalues converged"
-    d = d .- OmegaShift;
+    
+    
     fs = real(sqrt.(complex(d)))/(2*pi)
 
     # size(d), size(v), size(M)
     # @show d
-    # @info "Checking orthogonality"
-    # tol = 1.0e-6
-    # for i in 1:length(d), j in 1:length(d)
-    #     p = v[:, i]' * M * v[:, j]
-    #     if i == j && abs(p - 1) > tol
-    #         @show i, p
-    #     end
-    #     if i != j && abs(p) > tol
-    #         @show i, j, p
-    #     end
-    # end
-    # for i in 1:length(d), j in 1:length(d)
-    #     p = v[:, i]' * K * v[:, j]
-    #     if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
-    #         @show i, p
-    #     end
-    #     if i != j && abs(p) > max(tol, tol*abs(d[i]))
-    #         @show i, j, p, d[i]
-    #     end
-    # end
+    @info "Checking orthogonality"
+    tol = 1.0e-6
+    max_vMv_diag_error = 0.0
+    max_vMv_offdiag_error = 0.0
+    for i in 1:length(d), j in 1:length(d)
+        p = v[:, i]' * M * v[:, j]
+        if i == j && abs(p - 1) > tol
+            max_vMv_diag_error = max(max_vMv_diag_error, abs(p - 1))
+        end
+        if i != j && abs(p) > tol
+            max_vMv_offdiag_error = max(max_vMv_offdiag_error, abs(p))
+        end
+    end
+    max_vKv_diag_error = 0.0
+    max_vKv_offdiag_error = 0.0
+    for i in 1:length(d), j in 1:length(d)
+        p = v[:, i]' * K * v[:, j]
+        if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
+            max_vKv_diag_error = max(max_vKv_diag_error, abs(p - d[i]))
+        end
+        if i != j && abs(p) > max(tol, tol*abs(d[i]))
+            max_vKv_offdiag_error = max(max_vKv_offdiag_error, abs(p))
+        end
+    end
+    @info "Mass: diagonal error = $(max_vMv_diag_error), off-diagonal error = $(max_vMv_offdiag_error) "
+    @info "Stiffness: diagonal error = $(max_vKv_diag_error), off-diagonal error = $(max_vKv_offdiag_error) "
     println("Eigenvalues: $fs [Hz]")
     # open(meshfilebase * "-eval" * ".mat", "w") do file
     #     writedlm(file, d)
