@@ -2,7 +2,7 @@
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "183c17230a5bae228ac4cb5920e486cb9c588981"
+project_hash = "f3762b2b50a0b6ab57ae9ef437e7524ae20c4e66"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -219,9 +219,9 @@ version = "1.2.1"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "Revise", "SparseArrays", "Statistics", "StatsBase", "SuiteSparse", "Test"]
-path = "../FinEtoolsDeforLinear.jl"
+git-tree-sha1 = "61b1df07b8117df57a3ce174a9668fbc73d84ac2"
 uuid = "e9187c00-8bdd-11e9-1e70-7ba8303116a2"
-version = "1.4.5"
+version = "1.4.6"
 
 [[deps.ForwardDiff]]
 deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "LogExpFunctions", "NaNMath", "Preferences", "Printf", "Random", "SpecialFunctions", "StaticArrays"]
