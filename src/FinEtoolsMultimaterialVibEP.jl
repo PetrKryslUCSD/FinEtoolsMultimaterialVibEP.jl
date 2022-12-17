@@ -5,7 +5,7 @@ using Printf
 using DelimitedFiles
 using FinEtools
 using FinEtools.MeshExportModule: MESH
-using FinEtoolsDeforLinear.AlgoDeforLinearModule
+using SubSIt: ssit
 using FinEtoolsDeforLinear
 using FinEtoolsAcoustics
 using FinEtools.MeshExportModule
@@ -82,12 +82,9 @@ function solve_ep(parameterfile)
     @info "Solving eigenvalue problem for $neigvs frequencies"
     if method == "eigs"
         d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
-        # @show "eigs", d
         d = d .- OmegaShift;
     else
-        lamb, v, nconv, niter, lamberr = AlgoDeforLinearModule.ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
-        d = lamb
-         # @show "ssit", d
+        d, v, nconv, niter, lamberr = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
         d = d .- OmegaShift;
         conv = nconv
     end
