@@ -16,8 +16,12 @@ using Statistics
 using Arpack
 using MAT
 using DataDrop
+using Statistics
+using FinEtoolsTetsFromTris
 
 function solve_ep(parameterfile)
+
+    Random.seed!(1234);
 
     parameters = open(parameterfile, "r") do file
         JSON.parse(file)
@@ -124,7 +128,7 @@ function solve_ep(parameterfile)
         @info "Stiffness: diagonal error = $(max_vKv_diag_error), off-diagonal error = $(max_vKv_offdiag_error) "
     end
 
-    println("Eigenvalues: $fs [Hz]")
+    @info("Natural frequencies:\n $(round.(fs, digits=5)) [Hz]")
     # open(meshfilebase * "-eval" * ".mat", "w") do file
     #     writedlm(file, d)
     #     # write(file, matrix[:])
@@ -198,8 +202,36 @@ function solve_ep(parameterfile)
     if "numinteriorpoints_fraction" in keys(parameters)
         numinteriorpoints_fraction = parameters["numinteriorpoints_fraction"]
     end
-    numinteriorpoints = Int(round(numinteriorpoints_fraction * npanels))
-    interiorxyz = interiorpoints(fens, allfes, numinteriorpoints; use_labels = true)
+    if "numinteriorpoints" in keys(parameters)
+        numinteriorpoints = parameters["numinteriorpoints"]
+    else
+        numinteriorpoints = Int(round(numinteriorpoints_fraction * npanels))
+    end
+    interiorpoint_method = "random"
+    if "interiorpoint_method" in keys(parameters)
+        interiorpoint_method = parameters["interiorpoint_method"]
+    end
+    nummodes = 1
+    single_point_per_mode = false
+    rhow = 1000.0
+    cw = 1500.0
+    if interiorpoint_method == "mode_based"
+        if "single_point_per_mode" in keys(parameters)
+            single_point_per_mode = parameters["single_point_per_mode"]
+        end
+        if "nummodes" in keys(parameters)
+            nummodes = parameters["nummodes"]
+        else
+            nummodes = (single_point_per_mode ? numinteriorpoints : Int(round(numinteriorpoints / 5)))
+        end
+        if "rhow" in keys(parameters)
+            rhow = parameters["rhow"]
+        end
+        if "cw" in keys(parameters)
+            cw = parameters["cw"]
+        end
+    end
+    interiorxyz = interiorpoints(fens, allfes; interiorpoint_method, numinteriorpoints, nummodes, single_point_per_mode, rhow, cw)
 
     file = matopen(meshfilebase * ".mat", "w")
     write(file, "Omega", d)
@@ -218,53 +250,191 @@ function solve_ep(parameterfile)
     DataDrop.store_matrix(f, "/conn", connasarray(allfes))
 
     true
-
 end # solve_ep
 
 
-# The interior points are added as randomly selected centroids of (a fraction
-# of) the elements
-function interiorpoints(fens, fes, numpoints; use_labels = false)::Matrix{Float64}
+# # The interior points are added as randomly selected centroids of (a fraction
+# # of) the elements
+# function interiorpoints(fens, fes, numpoints; use_labels = false)::Matrix{Float64}
+#     xyz = fens.xyz
+#     # Fraction of finite elements that should have an interior point
+#     r = Float64(numpoints) / count(fes)
+#     if use_labels
+#         ulab  = unique(fes.label)
+#         # First count how many interior points we will generate
+#         numpoints = 0
+#         for l in ulab
+#             lst = selectelem(fens, fes, label = l)
+#             numpoints += max(1, Int(round(r * length(lst))))
+#         end
+#         numpoints = max(1, min(numpoints, count(fes)))
+#         interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
+#         p = 1
+#         for l in ulab
+#             lst = selectelem(fens, fes, label = l)
+#             sfes = subset(fes, lst)
+#             rix = randperm(count(sfes));
+#             conn = connasarray(sfes)
+#             np = max(1, Int(round(r * count(sfes))))
+#             for i in 1:np
+#                 k = rix[i]
+#                 interiorxyz[p, :] = mean(xyz[view(conn, k, :), :], dims=1)
+#                 p += 1
+#             end
+#         end
+#         @assert p == numpoints + 1
+#     else
+#         conn = connasarray(fes)
+#         rix = randperm(count(fes));
+#         numpoints = min(numpoints, count(fes))
+#         interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
+#         for i in 1:numpoints
+#             k = rix[i]
+#             interiorxyz[i, :] = mean(xyz[view(conn, k, :), :], dims=1)
+#         end
+#     end
+
+#     return interiorxyz
+# end # function
+
+function _random_points(fens, fes, numpoints)
     xyz = fens.xyz
-    # Fraction of finite elements that should have an interior point
-    r = Float64(numpoints) / count(fes)
-    if use_labels
-        ulab  = unique(fes.label)
-        # First count how many interior points we will generate
-        numpoints = 0
-        for l in ulab
-            lst = selectelem(fens, fes, label = l)
-            numpoints += max(1, Int(round(r * length(lst))))
-        end
-        numpoints = max(1, min(numpoints, count(fes)))
-        interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
-        p = 1
-        for l in ulab
-            lst = selectelem(fens, fes, label = l)
-            sfes = subset(fes, lst)
-            rix = randperm(count(sfes));
-            conn = connasarray(sfes)
-            np = max(1, Int(round(r * count(sfes))))
-            for i in 1:np
-                k = rix[i]
-                interiorxyz[p, :] = mean(xyz[view(conn, k, :), :], dims=1)
-                p += 1
-            end
-        end
-        @assert p == numpoints + 1
+    conn = connasarray(fes)
+    rix = randperm(count(fes));
+    interiorxyz = fill(0.0, numpoints, 3)
+    for i in 1:numpoints
+        k = rix[i]
+        interiorxyz[i, :] = mean(xyz[view(conn, k, :), :], dims=1)
+    end
+    return interiorxyz
+end
+
+
+function _do_mode_based_points(fens, fes, nummodes, rho, c, compute_threshold)
+    bulk =  c^2*rho;
+    xyz = fens.xyz
+    conn = connasarray(fes)
+
+    geom = NodalField(fens.xyz)
+    P = NodalField(zeros(size(fens.xyz,1),1))
+    bfes = meshboundary(fes)
+    setebc!(P, connectednodes(bfes))
+    numberdofs!(P)
+
+    femm = FEMMAcoust(IntegDomain(fes, TetRule(1)),
+        MatAcoustFluid(bulk,rho))
+
+    S = acousticstiffness(femm, geom, P);
+    C = acousticmass(femm, geom, P);
+
+    d, v, nconv = eigs(C, S; nev=nummodes, which=:SM, explicittransform=:none)
+    v = real.(v)
+    fs=real(sqrt.(complex(d)))./(2*pi)
+    @info("Interior frequencies: $fs [Hz]")
+    ks = (2*pi).*fs./c./phun("m")
+    # println("Wavenumbers: $(ks) [m]")
+
+    magP = deepcopy(P)
+    interiorxyz = fill(0.0, 0, 3)
+    for s in 1:nummodes
+        scattersysvec!(magP, abs.(v[:, s])) # rectified
+        thresholdP = compute_threshold(magP)
+        x = _identify_peaks(fens, fes, magP, thresholdP, s)
+        interiorxyz = vcat(interiorxyz, x)
+    end
+
+    return interiorxyz
+end # _do_mode_based_points
+
+function _mode_based_points(fens, fes, nummodes, rho, c, compute_threshold)
+    bfes = meshboundary(fes)
+    obfes = outer_surface_of_solid(fens, bfes)
+    if count(bfes) == count(obfes)
+        # the outer boundary is all the boundary there is
+        return _do_mode_based_points(fens, fes, nummodes, rho, c, compute_threshold)
     else
-        conn = connasarray(fes)
-        rix = randperm(count(fes));
-        numpoints = min(numpoints, count(fes))
-        interiorxyz = fill(zero(eltype(xyz)), numpoints, 3)
-        for i in 1:numpoints
-            k = rix[i]
-            interiorxyz[i, :] = mean(xyz[view(conn, k, :), :], dims=1)
+        # the outer boundary needs to be filled in with tetrahedral mesh to
+        # represent the complement of the fluid domain
+        _fens = deepcopy(fens)
+        connected = findunconnnodes(_fens, obfes);
+        _fens, new_numbering = compactnodes(_fens, connected);
+        bfes = renumberconn!(obfes, new_numbering);
+        __fens, __fes = FinEtoolsTetsFromTris.mesh(_fens, obfes)
+        return _do_mode_based_points(__fens, __fes, nummodes, rho, c, compute_threshold)
+    end
+end # _mode_based_points
+
+function _first_included(inclusion_list)
+    for j in eachindex(inclusion_list)
+        if inclusion_list[j]
+            return j
         end
     end
-    
+    return 0
+end
+
+function _identify_peaks(fens, fes, magP, thresholdP, s)
+    # First prune all elements whose node(s)'s value lies below a threshold
+    # vtkexportmesh("all.vtk", connasarray(fes), fens.xyz, FinEtools.MeshExportModule.VTK.T4)
+    inclusion_list = fill(false, count(fes))
+    for i in 1:count(fes)
+        isin = true
+        for k in fes.conn[i]
+            if magP.values[k] < thresholdP
+                isin = false; break
+            end
+        end
+        inclusion_list[i] = isin
+    end
+    pv = fill(0.0, length(magP.values))
+    peak_locations = []
+    # Now identify bunches of connected elements, and from each connected bunch
+    # pick the node with the largest absolute value of the pressure
+    while true
+        f = _first_included(inclusion_list)
+        if f == 0
+            break
+        end
+        il = findall(inclusion_list)
+        sfes = subset(fes, il)
+        # vtkexportmesh("il-$s-$f.vtk", connasarray(sfes), fens.xyz, FinEtools.MeshExportModule.VTK.T4)
+        el = selectelem(fens, sfes, flood = true, startnode = fes.conn[f][1])
+        @assert !isempty(el)
+        # vtkexportmesh("el-$s-$f.vtk", connasarray(subset(sfes, el)), fens.xyz, FinEtools.MeshExportModule.VTK.T4)
+        # @show length(el)
+        inclusion_list[il[el]] .= false
+        nl = connectednodes(subset(sfes, el))
+        pv .= 0
+        for k in nl
+            pv[k] = magP.values[k]
+        end
+        npeak = argmax(pv)
+        push!(peak_locations, fens.xyz[npeak, :])
+    end
+    # Now we have the peak locations
+    interiorxyz = fill(0.0, length(peak_locations), 3)
+    for i in eachindex(peak_locations)
+        interiorxyz[i, :] .= peak_locations[i]
+    end
     return interiorxyz
-end # function 
+end
+
+function interiorpoints(fens, fes; interiorpoint_method = "random", numinteriorpoints = 10, nummodes = 1, single_point_per_mode = false, rhow = 1000.0, cw = 1500.0)::Matrix{Float64}
+    compute_threshold(magP) = (single_point_per_mode ? 0.0
+        : min(maximum(magP.values) * 0.8, mean(magP.values)  * 2)
+    )
+
+    if interiorpoint_method == "mode_based"
+        interiorxyz = _mode_based_points(fens, fes, nummodes, rhow, cw, compute_threshold)
+    elseif interiorpoint_method == "random"
+        interiorxyz = _random_points(fens, fes, numinteriorpoints)
+    else
+        error("Unknown interior-point method")
+        interiorxyz = nothing
+    end
+
+    return interiorxyz
+end # function
 
 
 

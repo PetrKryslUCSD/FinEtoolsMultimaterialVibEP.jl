@@ -1,0 +1,20 @@
+{
+    "meshfile": "two-mat-cyl-w-voids.nas",
+    "neigvs": 20,
+    "frequencyshift": 10.0,
+    "materials": {
+        "2": {
+            "name": "aluminum",
+            "E": 7.0e10,
+            "nu": 0.34,
+            "rho": 2700.0
+        },
+        "1": {
+            "name": "steel",
+            "E": 2.05e11,
+            "nu": 0.3,
+            "rho": 7850.0
+        }
+    },
+    "interiorpoint_method": "mode_based"
+}

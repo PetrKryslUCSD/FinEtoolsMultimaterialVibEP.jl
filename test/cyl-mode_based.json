@@ -1,0 +1,14 @@
+{
+    "meshfile": "cyl.nas",
+    "neigvs": 20,
+    "frequencyshift": 10.0,
+    "materials": {
+        "1": {
+            "name": "aluminum",
+            "E": 7.0e10,
+            "nu": 0.34,
+            "rho": 2700.0
+        }
+    },
+    "interiorpoint_method": "mode_based"
+}
