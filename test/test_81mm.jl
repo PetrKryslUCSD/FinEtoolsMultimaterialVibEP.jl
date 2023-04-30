@@ -71,3 +71,14 @@ vtkexportmesh("fin81mm-boundary-2.vtk", bconn, xyz, VTK.T3; scalars = [("label",
 areas = DataDrop.retrieve_matrix("sim~modal~Finned_81mm_Max_12kHz_nas~50_50_20000~ne=200-no-chief-7_json~areas.mdat");
 
 @show norm(areas - vars["areas"]) / norm(areas)
+
+
+xyz = DataDrop.retrieve_matrix("sim~modal~Finned_81mm_Max_12kHz_nas~50_50_20000~ne=200-no-chief-7_json~xyz.mdat");
+
+@show norm(xyz - vars["X"]) / norm(xyz)
+
+
+bconn = DataDrop.retrieve_matrix("sim~modal~Finned_81mm_Max_12kHz_nas~50_50_20000~ne=200-no-chief-7_json~bconn.mdat");
+
+@show norm(bconn - vars["conn"]) / norm(bconn)
+
