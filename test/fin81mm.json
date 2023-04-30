@@ -1,0 +1,20 @@
+{
+    "meshfile": "Finned_81mm_Max_12kHz.nas",
+    "neigvs": 200,
+    "frequencyshift": 500.0,
+    "materials": {
+        "1": {
+            "name": "aluminum",
+            "E": 72330000000.0,
+            "nu": 0.3508,
+            "rho": 2700.0
+        },
+        "2": {
+            "name": "steel",
+            "E": 206990000000.0,
+            "nu": 0.2974,
+            "rho": 7861.0
+        }
+    },
+    "interiorpoint_method": "mode_based"
+}
