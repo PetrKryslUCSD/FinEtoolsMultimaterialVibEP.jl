@@ -38,7 +38,7 @@ function solve_ep(parameterfile)
     tol = haskey(parameters, "tol") ? parameters["tol"] : 1.0e-3
     check_orthogonality = haskey(parameters, "check_orthogonality") ? parameters["check_orthogonality"] : false
 
-    meshfilebase, ext = splitext(meshfile)
+    meshfilebase, _ = splitext(meshfile)
 
     OmegaShift = (2*pi*frequencyshift) ^ 2; # to resolve rigid body modes
     
@@ -66,13 +66,13 @@ function solve_ep(parameterfile)
     for i in 1:length(fesets)
         pid = string(pids[i])
         setlabel!(fesets[i], pids[i])
-        E, nu, rho = materials[pid]["E"], materials[pid]["nu"], materials[pid]["rho"]
+        E, nu, rho = Float64(materials[pid]["E"]), Float64(materials[pid]["nu"]), Float64(materials[pid]["rho"])
         material = MatDeforElastIso(MR, rho, E, nu, 0.0)
         femm = FEMMDeforLinearESNICET4(MR, IntegDomain(fesets[i], NodalSimplexRule(3)), material)
-        femm = associategeometry!(femm, geom)
+        associategeometry!(femm, geom; stabilization_parameters=(2.0, 3.0))
         K += stiffness(femm, geom, u)
         M += mass(femm, geom, u)
-        if allfes == nothing
+        if allfes === nothing
             allfes = deepcopy(fesets[i])
         else
             allfes = cat(allfes, deepcopy(fesets[i]))
@@ -88,13 +88,15 @@ function solve_ep(parameterfile)
         d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
         d = d .- OmegaShift;
     else
-        d, v, nconv, niter, lamberr = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
+        d, v, nconv, _, _ = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
         d = d .- OmegaShift;
         conv = nconv
     end
     @info "$conv eigenvalues converged"
-    
-    
+
+    Omega = deepcopy(d)
+    Phi = deepcopy(v)
+
     fs = real(sqrt.(complex(d)))/(2*pi)
 
     # size(d), size(v), size(M)
@@ -129,21 +131,14 @@ function solve_ep(parameterfile)
     end
 
     @info("Natural frequencies:\n $(round.(fs, digits=5)) [Hz]")
-    # open(meshfilebase * "-eval" * ".mat", "w") do file
-    #     writedlm(file, d)
-    #     # write(file, matrix[:])
+
+    # File =  "modes.vtk"
+    # vectors = []
+    # for mode  in  1:20
+    #     scattersysvec!(u, v[:,mode])
+    #     push!(vectors, ("mode-$(mode)", deepcopy(u.values)))
     # end
-    # mode = 7
-    # scattersysvec!(u, v[:,mode])
-    # File =  "multimaterial_nas.vtk"
-    # vtkexportmesh(File, fens, allfes; vectors=[("mode$mode", u.values)])
-    # @async run(`"paraview.exe" $File`)
-    # for i in 1:length(d)
-    #     open(meshfilebase * "-evec$(i)" * ".mat", "w") do file
-    #         writedlm(file, v[:, i])
-    #         # write(file, matrix[:])
-    #     end
-    # end
+    # vtkexportmesh(File, fens, allfes; vectors=vectors)
 
     # Extract the boundary
     bfes = meshboundary(allfes)
@@ -166,12 +161,12 @@ function solve_ep(parameterfile)
     permutation[on] = length(sn)+1:length(permutation);
     numberdofs!(P, permutation);
 
-    mX = fill(Inf, P.nfreedofs, 3);
-    for j in 1:count(fens)
-        if P.dofnums[j] > 0
-            mX[P.dofnums[j], :] = fens.xyz[j, :]
-        end
-    end
+    # mX = fill(Inf, P.nfreedofs, 3);
+    # for j in 1:count(fens)
+    #     if P.dofnums[j] > 0
+    #         mX[P.dofnums[j], :] = fens.xyz[j, :]
+    #     end
+    # end
     # Create a machine for the surface integrals, and calculate the coupling
     # structural-acoustic matrix. Note that the acoustic fluid properties are
     # not used in this method and they are supplied as dummy values.
@@ -179,23 +174,24 @@ function solve_ep(parameterfile)
     G = acousticcouplingpanels(bfemm, geom, u);
 
     # Construct the matrix of the connectivities of all the surface finite elements (panels)
-    mConn = zeros(Int, count(bfes), nodesperelem(bfes))
-    for j in 1:size(mConn, 1)
-        mConn[j,:] .= P.dofnums[bconn[j, :]]; # need to renumber to match mX
-    end
+    # mConn = zeros(Int, count(bfes), nodesperelem(bfes))
+    # for j in 1:size(mConn, 1)
+        # mConn[j,:] .= P.dofnums[bconn[j, :]]; # need to renumber to match mX
+    # end
 
     # @infiltrate
 
     # MESH.write_MESH("$(meshfilebase)-surface.mesh", fens, bfes) 
 
-    sgeom = NodalField(mX)
-    sfes = fromarray!(bfes, mConn)
+    # sgeom = NodalField(mX)
+    # sfes = fromarray!(bfes, mConn)
+    sfes = bfes
     npanels = count(sfes)
     # Compute the areas of all the boundary triangles. 
     areas = fill(0.0, npanels)
     for panel = 1:npanels
         femm1  =  FEMMBase(IntegDomain(subset(sfes, [panel]), SimplexRule(2, 1)))
-        areas[panel] = integratefunction(femm1, sgeom, (x) ->  1.0)
+        areas[panel] = integratefunction(femm1, geom, (x) ->  1.0)
     end
 
     numinteriorpoints_fraction = 0.05
@@ -234,10 +230,10 @@ function solve_ep(parameterfile)
     interiorxyz = interiorpoints(fens, allfes; interiorpoint_method, numinteriorpoints, nummodes, single_point_per_mode, rhow, cw)
 
     file = matopen(meshfilebase * ".mat", "w")
-    write(file, "Omega", d)
-    write(file, "E", v)
-    write(file, "X", mX)
-    write(file, "conn", mConn)
+    write(file, "Omega", Omega)
+    write(file, "E", Phi)
+    write(file, "X", fens.xyz)
+    write(file, "conn", bconn)
     write(file, "G", G)
     write(file, "areas", areas)
     write(file, "interiorxyz", interiorxyz)
@@ -312,8 +308,6 @@ end
 
 function _do_mode_based_points(fens, fes, nummodes, rho, c, compute_threshold)
     bulk =  c^2*rho;
-    xyz = fens.xyz
-    conn = connasarray(fes)
 
     geom = NodalField(fens.xyz)
     P = NodalField(zeros(size(fens.xyz,1),1))
@@ -327,11 +321,11 @@ function _do_mode_based_points(fens, fes, nummodes, rho, c, compute_threshold)
     S = acousticstiffness(femm, geom, P);
     C = acousticmass(femm, geom, P);
 
-    d, v, nconv = eigs(C, S; nev=nummodes, which=:SM, explicittransform=:none)
+    d, v, _ = eigs(C, S; nev=nummodes, which=:SM, explicittransform=:none)
     v = real.(v)
     fs=real(sqrt.(complex(d)))./(2*pi)
     @info("Interior frequencies: $fs [Hz]")
-    ks = (2*pi).*fs./c./phun("m")
+    # ks = (2*pi).*fs./c./phun("m")
     # println("Wavenumbers: $(ks) [m]")
 
     magP = deepcopy(P)
