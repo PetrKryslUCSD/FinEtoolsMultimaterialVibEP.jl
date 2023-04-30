@@ -31,5 +31,6 @@ Manifest.toml
 
 *.mat
 *.dat
+*.mdat
 *.mesh
 *.h5
