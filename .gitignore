@@ -34,3 +34,5 @@ Manifest.toml
 *.mdat
 *.mesh
 *.h5
+
+debugging/*
