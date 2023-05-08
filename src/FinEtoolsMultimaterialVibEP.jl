@@ -88,7 +88,8 @@ function solve_ep(parameterfile)
         d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
         d = d .- OmegaShift;
     else
-        d, v, nconv, _, _ = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
+        d, v, nconv, niter, lamberr = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
+        mass_orthogonalize!(v, M)
         d = d .- OmegaShift;
         conv = nconv
     end
