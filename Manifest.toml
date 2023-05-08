@@ -247,9 +247,9 @@ version = "1.0.0"
 
 [[deps.FinEtools]]
 deps = ["ChunkSplitters", "DataDrop", "DelimitedFiles", "HDF5", "LinearAlgebra", "LoopVectorization", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase", "SymRCM", "Test", "Unicode", "WriteVTK"]
-git-tree-sha1 = "3e533c0439335779cc55377f270221461fa36959"
+git-tree-sha1 = "ac75a357026936b6a888ce5b5b3d487301df1b74"
 uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
-version = "6.1.1"
+version = "6.1.2"
 
 [[deps.FinEtoolsAcoustics]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "Test"]
@@ -545,9 +545,9 @@ version = "0.2.1"
 
 [[deps.Preferences]]
 deps = ["TOML"]
-git-tree-sha1 = "47e5f437cc0e7ef2ce8406ce1e7e24d44915f88d"
+git-tree-sha1 = "7eb1686b4f04b82f96ed7a4ea5890a4f0c7a09f1"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
-version = "1.3.0"
+version = "1.4.0"
 
 [[deps.Printf]]
 deps = ["Unicode"]
@@ -679,9 +679,9 @@ version = "1.10.0"
 
 [[deps.SubSIt]]
 deps = ["LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "c1d479d6bcacacf1053c7359eb4ebba257740c03"
+path = "../SubSIt.jl"
 uuid = "f42569b2-8c12-4cce-ba3b-39ee24d84962"
-version = "1.1.1"
+version = "1.1.2"
 
 [[deps.SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -744,9 +744,9 @@ version = "0.5.1"
 
 [[deps.TranscodingStreams]]
 deps = ["Random", "Test"]
-git-tree-sha1 = "0b829474fed270a4b0ab07117dce9b9a2fa7581a"
+git-tree-sha1 = "9a6ae7ed916312b41236fcef7e0af564ef934769"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
-version = "0.9.12"
+version = "0.9.13"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
