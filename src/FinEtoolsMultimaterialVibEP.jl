@@ -36,7 +36,7 @@ function solve_ep(parameterfile)
     method = haskey(parameters, "method") ? parameters["method"] : "eigs"
     verbose = haskey(parameters, "verbose") ? parameters["verbose"] : false
     tol = haskey(parameters, "tol") ? parameters["tol"] : 1.0e-3
-    check_orthogonality = haskey(parameters, "check_orthogonality") ? parameters["check_orthogonality"] : false
+    check_orthogonality = haskey(parameters, "check_orthogonality") ? parameters["check_orthogonality"] : true
 
     meshfilebase, _ = splitext(meshfile)
 
@@ -100,15 +100,14 @@ function solve_ep(parameterfile)
 
     fs = real(sqrt.(complex(d)))/(2*pi)
 
-    # size(d), size(v), size(M)
-    # @show d
     if check_orthogonality
         @info "Checking orthogonality"
         tol = 1.0e-6
         max_vMv_diag_error = 0.0
         max_vMv_offdiag_error = 0.0
-        for i in 1:length(d), j in 1:length(d)
-            p = v[:, i]' * M * v[:, j]
+        Mred = v' * M * v
+        for i in 1:length(d), j in i:length(d)
+            p = Mred[i, j]
             if i == j && abs(p - 1) > tol
                 max_vMv_diag_error = max(max_vMv_diag_error, abs(p - 1))
             end
@@ -118,8 +117,9 @@ function solve_ep(parameterfile)
         end
         max_vKv_diag_error = 0.0
         max_vKv_offdiag_error = 0.0
-        for i in 1:length(d), j in 1:length(d)
-            p = v[:, i]' * K * v[:, j]
+        Kred = v' * K * v
+        for i in 1:length(d), j in i:length(d)
+            p = Kred[i, j]
             if i == j && abs(p - d[i]) > max(tol, tol*abs(d[i]))
                 max_vKv_diag_error = max(max_vKv_diag_error, abs(p - d[i]))
             end
