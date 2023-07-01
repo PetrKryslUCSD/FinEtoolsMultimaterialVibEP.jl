@@ -60,8 +60,8 @@ function solve_ep(parameterfile)
     numberdofs!(u)
     @info "$(count(fens)) nodes"
 
-    K = spzeros(u.nfreedofs, u.nfreedofs)
-    M = spzeros(u.nfreedofs, u.nfreedofs)
+    K = spzeros(nalldofs(u), nalldofs(u))
+    M = spzeros(nalldofs(u), nalldofs(u))
     allfes = nothing
     for i in 1:length(fesets)
         pid = string(pids[i])
@@ -85,15 +85,13 @@ function solve_ep(parameterfile)
     # well as the final residual vector resid.
     @info "Solving eigenvalue problem for $neigvs frequencies"
     if method == "eigs"
-        d, v, conv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
+        d, v, nconv = eigs(Symmetric(K+OmegaShift*M), Symmetric(M); nev=neigvs, which=:SM, maxiter = maxiter, explicittransform=:none, check = 1)
         d = d .- OmegaShift;
     else
         d, v, nconv, niter, lamberr = ssit(K+OmegaShift*M, M; nev=neigvs, tol = tol, maxiter = maxiter, verbose=verbose)
-        mass_orthogonalize!(v, M)
         d = d .- OmegaShift;
-        conv = nconv
     end
-    @info "$conv eigenvalues converged"
+    @info "$nconv eigenvalues converged"
 
     Omega = deepcopy(d)
     Phi = deepcopy(v)
