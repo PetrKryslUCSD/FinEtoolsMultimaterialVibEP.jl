@@ -8,7 +8,6 @@ using FinEtools.MeshExportModule: VTK
 using MAT
 using DataDrop
 using LinearAlgebra
-using PlotlyLight
 
 try rm("fin81mm.mat"); catch end
 # # The name of the parameter file is up to you
